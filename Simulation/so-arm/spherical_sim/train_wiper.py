@@ -84,6 +84,14 @@ def make_env():
         overforce_threshold=80.0,
         ctrl_scale=2.5,
         frame_skip=10,
+        # LiDAR: 水平8 + 垂直8、本数は学習速度に合わせて調整可
+        lidar_n_horizontal=8,
+        lidar_n_vertical=8,
+        lidar_max_dist=1.5,
+        # 半径ランダム化: 学習の汎化を狙う
+        randomize_radius=True,
+        radius_min=0.35,
+        radius_max=0.8,
         seed=42
     )
 
@@ -104,7 +112,7 @@ if __name__ == "__main__":
     callbacks = CallbackList([
         CoverageCallback(10_000),
         # 指定秒数のみ表示し自動で閉じる。例: display_seconds=8.0
-        VizCallback(make_env, viz_freq=50_000, viz_steps=1500, slow_down=1.2, hold_after=False, display_seconds=5.0)
+        VizCallback(make_env, viz_freq=50_000, viz_steps=10, slow_down=1.2, hold_after=False, display_seconds=5.0)
     ])
     model.learn(total_timesteps=1_000_000, callback=callbacks)
     os.makedirs("models", exist_ok=True)
