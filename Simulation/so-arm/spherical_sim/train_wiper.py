@@ -5,6 +5,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3.common.vec_env import DummyVecEnv
 from mujoco import viewer as mj_viewer
+import torch
 
 from sphere_wipe_env import SphereWipeEnv
 
@@ -79,7 +80,7 @@ def make_env():
     return SphereWipeEnv(
         grid_theta=24, grid_phi=48,
         sphere_radius=0.5,
-        max_steps=3000,
+        max_steps=30000,
         contact_force_threshold=1.0,
         overforce_threshold=80.0,
         ctrl_scale=2.5,
@@ -89,34 +90,63 @@ def make_env():
         lidar_n_vertical=8,
         lidar_max_dist=1.5,
         # 半径ランダム化: 学習の汎化を狙う
-        randomize_radius=True,
+        randomize_radius=False,
         radius_min=0.35,
         radius_max=0.8,
         seed=42
     )
 
 if __name__ == "__main__":
+    # --- 設定: チェックポイント再開とデバイス選択 ---
+    RESUME_FROM_CHECKPOINT = True  # Trueで既存モデルから再開
+    CHECKPOINT_PATH = os.path.join("models", "ppo_sphere_wipe_lidar.zip")
+
+    def choose_device(prefer_mps: bool = True) -> str:
+        try:
+            if prefer_mps and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                return "cpu"
+        except Exception:
+            pass
+        if torch.cuda.is_available():
+            return "cuda"
+        return "cpu"
+
+    device = choose_device(prefer_mps=True)
+    print(f"[Device] Using device: {device}")
+
     env = DummyVecEnv([make_env])
 
-    model = PPO(
-        "MlpPolicy", env,
-        n_steps=2048,
-        batch_size=256,
-        gae_lambda=0.95,
-        gamma=0.995,
-        learning_rate=3e-4,
-        ent_coef=0.01,
-        clip_range=0.2,
-        verbose=1
-    )
+    # 既存モデルから再開 or 新規作成
+    model = None
+    if RESUME_FROM_CHECKPOINT and os.path.isfile(CHECKPOINT_PATH):
+        try:
+            print(f"[Resume] Loading checkpoint from: {CHECKPOINT_PATH}")
+            model = PPO.load(CHECKPOINT_PATH, env=env, device=device)
+            print("[Resume] Loaded successfully. Continue training.")
+        except Exception as e:
+            print(f"[Resume] Failed to load checkpoint, fallback to new model. Reason: {e}")
+
+    if model is None:
+        model = PPO(
+            "MlpPolicy", env,
+            n_steps=4096,
+            batch_size=512,
+            gae_lambda=0.95,
+            gamma=0.995,
+            learning_rate=3e-4,
+            ent_coef=0.04,
+            clip_range=0.3,
+            verbose=1,
+            device=device
+        )
     callbacks = CallbackList([
         CoverageCallback(10_000),
         # 指定秒数のみ表示し自動で閉じる。例: display_seconds=8.0
-        VizCallback(make_env, viz_freq=50_000, viz_steps=10, slow_down=1.2, hold_after=False, display_seconds=5.0)
+        VizCallback(make_env, viz_freq=50_000, viz_steps=3000, slow_down=1.2, hold_after=False, display_seconds=10.0)
     ])
-    model.learn(total_timesteps=1_000_000, callback=callbacks)
+    model.learn(total_timesteps=10_000_000, callback=callbacks)
     os.makedirs("models", exist_ok=True)
-    model.save("models/ppo_sphere_wipe")
+    model.save("models/ppo_sphere_wipe_lidar_10m")
 
     obs, _ = env.reset()
     total_cov = 0.0

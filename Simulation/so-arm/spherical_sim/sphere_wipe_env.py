@@ -8,7 +8,7 @@ from mujoco import mjtObj
 
 # ---- MJCFモデル（球 + 3自由度アーム + パッド）を文字列で定義 ----
 def build_mjcf_xml(
-    sphere_radius=0.5,
+    sphere_radius=0.8,
     arm_base_height=0.0,
     link_lengths=(0.35, 0.35, 0.25),
     pad_radius=0.03
@@ -309,12 +309,12 @@ class SphereWipeEnv(gym.Env):
         # 報酬設計
         coverage = self.cover.mean()
         rew = 0.0
-        rew += agg_new * 2.0                # 新規セル獲得を強く推奨
-        rew += (1.0 if max_nf > 0.5 else 0) * 0.05  # 接触維持の微小報酬
+        rew += agg_new * 4.0                # 新規セル獲得を強く推奨
+        rew += (1.0 if max_nf > 0.5 else 0) * 0.2  # 接触維持の微小報酬
         if max_nf > self.overforce_threshold:
             rew -= 0.5                       # 押し付け過多の罰
         if agg_new == 0:
-            rew -= 0.002                     # 同じ場所ばかり/空振りの小罰
+            rew -= 0.04                     # 同じ場所ばかり/空振りの小罰
 
         # 終了条件
         terminated = coverage >= 0.99
